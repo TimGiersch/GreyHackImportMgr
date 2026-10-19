@@ -40,5 +40,5 @@ b. Use npm to build a .vsix file and import it into your VS extension Tab under 
 
 commands:<br>
 3. npm install -g @vscode/vsce<br>
-4. vsce package<br>
+4. vsce package --no-dependencies<br>
  -> input "y" if needed
