@@ -1,44 +1,44 @@
 # GreyHack ImportMgr
 
-Extension for GreyHack / GreyScript (`.src`).
+Extension for GreyHack / GreyScript (`.src`).<br>
 
-This is a extension on top of: "Greybel VS" by "_ayecue"
+This is a extension on top of: "Greybel VS" by "_ayecue"<br>
 
 ## Features
-- Automatic path resolution for `import_code`
-- Project-wide auto-completion
-- “Go to Definition” for methods, functions, and objects
+- Automatic path resolution for `import_code`<br>
+- Project-wide auto-completion<br>
+- “Go to Definition” for methods, functions, and objects<br>
 
-It's recommended to only activate this extension in GreyHack-Projects and not by default.
--> Use VS Codes Profile Manager for this.
+It's recommended to only activate this extension in GreyHack-Projects and not by default.<br>
+-> Use VS Codes Profile Manager for this.<br>
 
 ## Usage
-Its Important that your import_code(path) is equal to your local folder
+Its Important that your import_code(path) is equal to your local folder<br>
 
-Example:
+Example:<br>
 
-GreyHack:
-import_code(/home/user/Project/Main.src)
-import_code(/home/user/Project/Utils/test.src)
+GreyHack:<br>
+import_code(/home/user/Project/Main.src)<br>
+import_code(/home/user/Project/Utils/test.src)<br>
 
-Local:
-Project (Working dir / open in vs)
-|-- Main.src
-|-- Utils/test.src
+Local:<br>
+   Project (Working dir / open in vs)<br>
+   |-- Main.src<br>
+   |-- Utils/test.src<br>
 
 ## Building
-To Use this Extension -> 
+To Use this Extension -> <br>
 
-1. open the Extension Folder in VS Code.
-2. run: "npm install" in projekt root dir
+1. open the Extension Folder in VS Code.<br>
+2. run: "npm install" in projekt root dir<br>
 
-a. Use f5 to start a Test Window (Performance is reduced and the programm can crash)
+a. Use f5 to start a Test Window (Performance is reduced and the programm can crash)<br>
 
-OR
+OR<br>
 
-b. Use npm to build a .vsix file and import it into your VS extension Tab under the three dots.
+b. Use npm to build a .vsix file and import it into your VS extension Tab under the three dots.<br>
 
-commands:
-3. npm install -g @vscode/vsce
-4. vsce package
+commands:<br>
+3. npm install -g @vscode/vsce<br>
+4. vsce package<br>
  -> input "y" if needed
