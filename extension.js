@@ -5,7 +5,7 @@ const path = require("path");
 const logChannel = vscode.window.createOutputChannel("GreyHack ImportMgr Debug");
 
 function log(msg) {
-    logChannel.appendLine(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    logChannel.appendLine(`[${new Date().toLocaleTimeString()}]${msg}`);
 }
 
 function expandPlaceholders(input) {
@@ -140,8 +140,26 @@ function extractSymbolsFromText(text, filePath) {
     for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
 
-        // 1. Real Objects-Methods
-        let m = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\b/.exec(l);
+        // 1. Real Objects-Methods / Parameter-Detection (CommandManager.Help = function(arg1, arg2))
+        let m = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)/.exec(l);
+        if (m) {
+            const objName = m[1];
+            const methodName = m[2];
+            const params = m[3].trim();
+            const col = l.indexOf(methodName);
+            syms.push({ 
+                name: methodName, 
+                object: objName, 
+                params: params,
+                range: new vscode.Range(i, col, i, col + methodName.length), 
+                type: 'method', 
+                source: path.basename(filePath),
+                filePath: filePath
+            });
+            continue;
+        }
+
+        m = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\b/.exec(l);
         if (m) {
             const objName = m[1];
             const methodName = m[2];
@@ -149,6 +167,7 @@ function extractSymbolsFromText(text, filePath) {
             syms.push({ 
                 name: methodName, 
                 object: objName, 
+                params: '',
                 range: new vscode.Range(i, col, i, col + methodName.length), 
                 type: 'method', 
                 source: path.basename(filePath),
@@ -166,6 +185,7 @@ function extractSymbolsFromText(text, filePath) {
             syms.push({ 
                 name: propName, 
                 object: objName, 
+                params: '',
                 range: new vscode.Range(i, col, i, col + propName.length), 
                 type: 'property', 
                 source: path.basename(filePath),
@@ -175,13 +195,15 @@ function extractSymbolsFromText(text, filePath) {
         }
 
         // 3. Global Functions
-        m = /function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/.exec(l);
+        m = /function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/.exec(l);
         if (m) {
             const funcName = m[1];
+            const params = m[2].trim();
             const col = l.indexOf(funcName);
             syms.push({ 
                 name: funcName, 
                 object: null, 
+                params: params,
                 range: new vscode.Range(i, col, i, col + funcName.length), 
                 type: 'function', 
                 source: path.basename(filePath),
@@ -198,6 +220,7 @@ function extractSymbolsFromText(text, filePath) {
             syms.push({ 
                 name: varName, 
                 object: null, 
+                params: '',
                 range: new vscode.Range(i, col, i, col + varName.length), 
                 type: 'object', 
                 source: path.basename(filePath),
@@ -214,6 +237,7 @@ function extractSymbolsFromText(text, filePath) {
             syms.push({ 
                 name: varName, 
                 object: null, 
+                params: '',
                 range: new vscode.Range(i, col, i, col + varName.length), 
                 type: 'variable', 
                 source: path.basename(filePath),
@@ -258,10 +282,8 @@ function collectAllSymbols(document) {
             }
         }
 
-        // 1. Resolve forward imports in the current document
         resolveRecursively(currentText, path.dirname(currentPath));
         
-        // 2. Biderectional connection via main files in the workspace (with limit)
         const wsf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (wsf) {
             function scanWorkspaceForMain(dir, depth = 0) {
@@ -269,7 +291,7 @@ function collectAllSymbols(document) {
                 if (!fs.existsSync(dir)) return;
                 
                 try {
-                    const files = fs.readdirNames ? fs.readdirSync(dir) : fs.readdirSync(dir);
+                    const files = fs.readdirSync(dir);
                     for (const file of files) {
                         if (parsedFilesCount >= MAX_FILES) break;
                         const fullPath = path.join(dir, file);
@@ -318,7 +340,7 @@ function collectAllSymbols(document) {
         
         const uniqueMap = new Map();
         syms.forEach(s => {
-            const key = `${s.object || ''}_${s.name}`.toLowerCase();
+            const key = `${s.object} ${s.name}`.toLowerCase();
             if (!uniqueMap.has(key)) {
                 uniqueMap.set(key, s);
             }
@@ -336,7 +358,6 @@ function activate(context) {
 
     const documentSelector = { scheme: 'file', pattern: '**/*.{src,gh}' };
 
-    // Reload cache on save
     context.subscriptions.push(
         vscode.workspace.onDidSaveTextDocument(doc => {
             log(`File ${doc.fileName} saved – Cache & Autocompletion updated.`);
@@ -366,6 +387,55 @@ function activate(context) {
         }
     });
     context.subscriptions.push(defProv);
+
+    // Hover Probider for clean Class- and Methos Infos instead of "ClassName: any"
+    const hoverProv = vscode.languages.registerHoverProvider(documentSelector, {
+        provideHover(document, position) {
+            const wordRange = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
+            if (!wordRange) return null;
+            const word = document.getText(wordRange);
+
+            const lineText = document.lineAt(position.line).text;
+            const subLine = lineText.substring(0, wordRange.start.character);
+            const objMatch = subLine.match(/([A-Za-z_][A-Za-z0-9_]*)\.$/);
+            const targetObj = objMatch ? objMatch[1] : null;
+
+            const syms = collectAllSymbols(document);
+            let found = syms.find(s => s.name === word && (!targetObj || s.object === targetObj));
+
+            if (!found) {
+                found = syms.find(s => s.name === word && !s.object);
+            }
+
+            if (found) {
+                const md = new vscode.MarkdownString();
+                md.isTrusted = true;
+
+                if (found.object) {
+                    md.appendCodeblock(`${found.object}.${found.name}(${found.params || ''})`, 'greyscript');
+                    md.appendMarkdown(`*Type:* \`${found.type}\` (Class/Object: **${found.object}**)\n\n`);
+                } else if (found.type === 'object') {
+                    md.appendCodeblock(`${found.name} = {}`, 'greyscript');
+                    md.appendMarkdown(`*Type:* \`Class / Object Instance\`\n\n`);
+                } else if (found.type === 'function') {
+                    md.appendCodeblock(`function ${found.name}(${found.params || ''})`, 'greyscript');
+                    md.appendMarkdown(`*Type:* \`Global Function\`\n\n`);
+                } else {
+                    md.appendCodeblock(`${found.name}`, 'greyscript');
+                    md.appendMarkdown(`*Type:* \`${found.type}\`\n\n`);
+                }
+
+                if (found.source) {
+                    md.appendMarkdown(`*Defined in:* \`${found.source}\``);
+                }
+
+                return new vscode.Hover(md, wordRange);
+            }
+
+            return null;
+        }
+    });
+    context.subscriptions.push(hoverProv);
 
     // 2. Completion Item Provider
     const completionProv = vscode.languages.registerCompletionItemProvider(
