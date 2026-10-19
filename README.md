@@ -22,8 +22,8 @@ import_code(/home/user/Project/Main.src)
 import_code(/home/user/Project/Utils/test.src)
 
 Local:
-Project (Working dir / open in vs)
-|-- Main.src
+Project (Working dir / open in vs) \n
+|-- Main.src \n
 |-- Utils/test.src
 
 ## Building
