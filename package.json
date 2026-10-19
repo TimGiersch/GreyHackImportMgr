@@ -1,0 +1,73 @@
+{
+  "name": "greyhack-importmgr",
+  "displayName": "GreyHack ImportMgr",
+  "description": "Extended Import-Manager and IntelliSense for GreyHack / Greybel Projects",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "publisher": "DerTim",
+  "author": {
+    "name": "DerTim"
+  },
+  "icon": "icon.png",
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "greyhack",
+    "greyscript",
+    "import_code",
+    "autocompletion"
+  ],
+  "activationEvents": [
+    "onLanguage:greyscript"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "type": "object",
+      "title": "GreyHack Import Manager",
+      "properties": {
+        "greyhack.importMappings": {
+          "type": "array",
+          "description": "Optional: Manual mappings from game paths to the workspace.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "gameRoot": { "type": "string" },
+              "vscodeRoot": { "type": "string" }
+            },
+            "required": ["gameRoot", "vscodeRoot"]
+          },
+          "default": [
+            { 
+              "gameRoot": "/home/${env:USER}", 
+              "vscodeRoot": "${workspaceFolder}" 
+            }
+          ]
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "greyhack.resolveImports",
+        "title": "GreyHack: Resolve Imports (open mapped files)"
+      }
+    ]
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.105.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "eslint": "^9.36.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
