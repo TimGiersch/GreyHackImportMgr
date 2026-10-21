@@ -3,6 +3,9 @@
   "displayName": "GreyHack ImportMgr",
   "description": "Extended Import-Manager and IntelliSense for GreyHack / Greybel Projects",
   "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/TimGiersch/GreyHackImportMgr/"
+  },
   "engines": {
     "vscode": "^1.105.0"
   },
