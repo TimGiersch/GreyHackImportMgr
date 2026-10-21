@@ -137,10 +137,29 @@ function parseImportsFromText(text) {
 function extractSymbolsFromText(text, filePath) {
     const lines = text.split(/\r?\n/);
     const syms = [];
+    
+    function getDocComment(lineIdx) {
+        let comments = [];
+        let curr = lineIdx - 1;
+        while (curr >= 0) {
+            const trimmed = lines[curr].trim();
+            if (trimmed.startsWith('//')) {
+                comments.unshift(trimmed.substring(2).trim());
+                curr--;
+            } else if (trimmed === '') {
+                curr--;
+            } else {
+                break;
+            }
+        }
+        return comments.join('\n');
+    }
+
     for (let i = 0; i < lines.length; i++) {
         const l = lines[i];
+        const docComment = getDocComment(i);
 
-        // 1. Real Objects-Methods / Parameter-Detection (CommandManager.Help = function(arg1, arg2))
+        // 1. Object-Methods (z.B. CommandManager.Help = function(args))
         let m = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*function\s*\(([^)]*)\)/.exec(l);
         if (m) {
             const objName = m[1];
@@ -151,6 +170,7 @@ function extractSymbolsFromText(text, filePath) {
                 name: methodName, 
                 object: objName, 
                 params: params,
+                doc: docComment,
                 range: new vscode.Range(i, col, i, col + methodName.length), 
                 type: 'method', 
                 source: path.basename(filePath),
@@ -168,6 +188,7 @@ function extractSymbolsFromText(text, filePath) {
                 name: methodName, 
                 object: objName, 
                 params: '',
+                doc: docComment,
                 range: new vscode.Range(i, col, i, col + methodName.length), 
                 type: 'method', 
                 source: path.basename(filePath),
@@ -176,7 +197,7 @@ function extractSymbolsFromText(text, filePath) {
             continue;
         }
 
-        // 2. Real Objects-Properties / Arrays / Variables
+        // 2. Object-Propertys / Dictionaries (z.B. ThemeManager.COLORS = { ... } or single Keys in Blocks)
         m = /([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l);
         if (m) {
             const objName = m[1];
@@ -186,11 +207,42 @@ function extractSymbolsFromText(text, filePath) {
                 name: propName, 
                 object: objName, 
                 params: '',
+                doc: docComment,
                 range: new vscode.Range(i, col, i, col + propName.length), 
                 type: 'property', 
                 source: path.basename(filePath),
                 filePath: filePath
             });
+            
+            // If a Dictionary/Object is open, we parse the inner key (like "RED", "GREEN" ...)
+            if (l.includes('{')) {
+                let braceDepth = (l.match(/\{/g) || []).length - (l.match(/\}/g) || []).length;
+                let innerIdx = i + 1;
+                const parentObj = `${objName}.${propName}`;
+
+                while (innerIdx < lines.length && braceDepth > 0) {
+                    const innerLine = lines[innerIdx];
+                    braceDepth += (innerLine.match(/\{/g) || []).length - (innerLine.match(/\}/g) || []).length;
+                    
+                    // Search for Key in Dict: "RED": or RED:
+                    const keyMatch = /["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*:/ .exec(innerLine);
+                    if (keyMatch) {
+                        const keyName = keyMatch[1];
+                        const keyCol = innerLine.indexOf(keyName);
+                        syms.push({
+                            name: keyName,
+                            object: parentObj,
+                            params: '',
+                            doc: '',
+                            range: new vscode.Range(innerIdx, keyCol, innerIdx, keyCol + keyName.length),
+                            type: 'property',
+                            source: path.basename(filePath),
+                            filePath: filePath
+                        });
+                    }
+                    innerIdx++;
+                }
+            }
             continue;
         }
 
@@ -204,6 +256,7 @@ function extractSymbolsFromText(text, filePath) {
                 name: funcName, 
                 object: null, 
                 params: params,
+                doc: docComment,
                 range: new vscode.Range(i, col, i, col + funcName.length), 
                 type: 'function', 
                 source: path.basename(filePath),
@@ -212,7 +265,7 @@ function extractSymbolsFromText(text, filePath) {
             continue;
         }
 
-        // 4. Real Objects/Classes (e.g., CommandManager = {} OR SessionManager = getSessionManager())
+        // 4. Objects / Classes (z.B. ThemeManager = {})
         m = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\{\}|[A-Za-z_][A-Za-z0-9_]*\(.*\))/.exec(l);
         if (m) {
             const varName = m[1];
@@ -221,6 +274,7 @@ function extractSymbolsFromText(text, filePath) {
                 name: varName, 
                 object: null, 
                 params: '',
+                doc: docComment,
                 range: new vscode.Range(i, col, i, col + varName.length), 
                 type: 'object', 
                 source: path.basename(filePath),
@@ -229,7 +283,7 @@ function extractSymbolsFromText(text, filePath) {
             continue;
         }
 
-        // 5. Local Variables (local, var, const)
+        // 5. Lokal Variables
         m = /(local|var|const)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l);
         if (m) {
             const varName = m[2];
@@ -238,6 +292,7 @@ function extractSymbolsFromText(text, filePath) {
                 name: varName, 
                 object: null, 
                 params: '',
+                doc: docComment,
                 range: new vscode.Range(i, col, i, col + varName.length), 
                 type: 'variable', 
                 source: path.basename(filePath),
@@ -340,7 +395,7 @@ function collectAllSymbols(document) {
         
         const uniqueMap = new Map();
         syms.forEach(s => {
-            const key = `${s.object} ${s.name}`.toLowerCase();
+            const key = `${s.object}_${s.name}`.toLowerCase();
             if (!uniqueMap.has(key)) {
                 uniqueMap.set(key, s);
             }
@@ -388,7 +443,7 @@ function activate(context) {
     });
     context.subscriptions.push(defProv);
 
-    // Hover Probider for clean Class- and Methos Infos instead of "ClassName: any"
+    // Hover Provider: Shows Signatures, Typ, DataSource and Komments that are above!
     const hoverProv = vscode.languages.registerHoverProvider(documentSelector, {
         provideHover(document, position) {
             const wordRange = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
@@ -411,9 +466,14 @@ function activate(context) {
                 const md = new vscode.MarkdownString();
                 md.isTrusted = true;
 
+                // Show Comment over function
+                if (found.doc) {
+                    md.appendMarkdown(`${found.doc}\n\n---\n`);
+                }
+
                 if (found.object) {
                     md.appendCodeblock(`${found.object}.${found.name}(${found.params || ''})`, 'greyscript');
-                    md.appendMarkdown(`*Type:* \`${found.type}\` (Class/Object: **${found.object}**)\n\n`);
+                    md.appendMarkdown(`*Type:* \`${found.type}\` (Parent: **${found.object}**)\n\n`);
                 } else if (found.type === 'object') {
                     md.appendCodeblock(`${found.name} = {}`, 'greyscript');
                     md.appendMarkdown(`*Type:* \`Class / Object Instance\`\n\n`);
@@ -437,31 +497,31 @@ function activate(context) {
     });
     context.subscriptions.push(hoverProv);
 
-    // 2. Completion Item Provider
+    // 2. Completion Item Provider (Supports now complex variables ThemeManager.COLORS.RED)
     const completionProv = vscode.languages.registerCompletionItemProvider(
         documentSelector,
         {
             provideCompletionItems(document, position) {
                 const linePrefix = document.lineAt(position.line).text.substr(0, position.character);
-                const match = linePrefix.match(/\b([A-Za-z_][A-Za-z0-9_]*)\.$/);
+                
+                const match = linePrefix.match(/\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.$/);
 
                 const syms = collectAllSymbols(document);
                 const items = [];
                 
-                // A: Point completion (e.g., CommandManager.)
                 if (match) {
-                    const objName = match[1];
-                    const objMembers = syms.filter(s => s.object && s.object.toLowerCase() === objName.toLowerCase());
+                    const objQuery = match[1];
+                    const objMembers = syms.filter(s => s.object && s.object.toLowerCase() === objQuery.toLowerCase());
                     
                     objMembers.forEach(m => {
                         const item = new vscode.CompletionItem(m.name);
                         if (m.type === 'method') {
                             item.kind = vscode.CompletionItemKind.Method;
-                            item.detail = `Method of ${objName}` + (m.source ? ` (${m.source})` : '');
+                            item.detail = `Method of ${objQuery}` + (m.source ? ` (${m.source})` : '');
                             item.sortText = '1_' + m.name; 
                         } else {
                             item.kind = vscode.CompletionItemKind.Property;
-                            item.detail = `Property of ${objName}` + (m.source ? ` (${m.source})` : '');
+                            item.detail = `Property of ${objQuery}` + (m.source ? ` (${m.source})` : '');
                             item.sortText = '0_' + m.name; 
                         }
                         items.push(item);
@@ -469,8 +529,9 @@ function activate(context) {
                     return items;
                 }
 
-                // B: Global completion (e.g., print, get_shell, etc.)
+                // Globale Vorschläge
                 syms.forEach(s => {
+                    if (s.object) return;
                     const item = new vscode.CompletionItem(s.name);
                     
                     if (s.type === 'object') {
@@ -490,7 +551,7 @@ function activate(context) {
                     items.push(item);
                 });
 
-                // Built-ins to end
+                // Built-ins
                 const builtins = ['print', 'get_shell', 'get_router', 'import_code', 'user_input', 'include_lib', 'current_path'];
                 builtins.forEach(b => {
                     const item = new vscode.CompletionItem(b, vscode.CompletionItemKind.Function);
